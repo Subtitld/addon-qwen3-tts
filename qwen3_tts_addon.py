@@ -42,7 +42,7 @@ logging.basicConfig(stream=sys.stderr, level=logging.INFO,
 
 PROTOCOL = 1
 ADDON_ID = 'qwen3-tts'
-VERSION = '1.0.2'
+VERSION = '1.0.3'
 
 # HF repo ids (overridable via env for offline / mirrored installs).
 DEFAULT_CUSTOMVOICE_REPO = os.environ.get(

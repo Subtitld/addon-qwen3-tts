@@ -1,0 +1,76 @@
+{
+  "manifest_version": 1,
+  "id": "qwen3-tts",
+  "version": "1.0.0",
+  "display_name": "Qwen3-TTS (offline, 1.7B)",
+  "summary": "Multilingual neural TTS with 9 premium timbres + 3-second voice cloning. Heavy: ~3.5 GB model, 8+ GB RAM, CPU or CUDA.",
+  "author": "Subtitld add-on team",
+  "license": "Apache-2.0 (wrapper) + Apache-2.0 (Qwen3-TTS weights)",
+  "executable": "bin/qwen3-tts-addon",
+  "protocol": 1,
+  "startup_timeout_sec": 180,
+  "platforms": ["linux", "macos", "windows"],
+  "tasks": ["tts.synthesize"],
+  "voice_clone": true,
+  "languages": ["zh-cn", "en", "ja", "ko", "de", "fr", "ru", "pt", "es", "it"],
+  "voices": [
+    {"id": "qwen3-vivian",    "language": "zh-cn", "display_name": "Vivian — bright young female (Chinese)"},
+    {"id": "qwen3-serena",    "language": "zh-cn", "display_name": "Serena — warm young female (Chinese)"},
+    {"id": "qwen3-uncle-fu",  "language": "zh-cn", "display_name": "Uncle Fu — mellow seasoned male (Chinese)"},
+    {"id": "qwen3-dylan",     "language": "zh-cn", "display_name": "Dylan — youthful male (Chinese, Beijing dialect)"},
+    {"id": "qwen3-eric",      "language": "zh-cn", "display_name": "Eric — lively male (Chinese, Sichuan dialect)"},
+    {"id": "qwen3-ryan",      "language": "en",    "display_name": "Ryan — dynamic male (English)"},
+    {"id": "qwen3-aiden",     "language": "en",    "display_name": "Aiden — sunny American male (English)"},
+    {"id": "qwen3-ono-anna",  "language": "ja",    "display_name": "Ono Anna — playful young female (Japanese)"},
+    {"id": "qwen3-sohee",     "language": "ko",    "display_name": "Sohee — warm young female (Korean)"},
+    {"id": "qwen3-clone",     "language": "*",     "display_name": "Custom voice (clone from 3+ second reference)", "requires": ["voice_ref_audio"]}
+  ],
+  "models": [
+    {"id": "qwen3-tts-1_7b-customvoice", "repo": "Qwen/Qwen3-TTS-12Hz-1.7B-CustomVoice", "size_mb": 3400, "bundled": false},
+    {"id": "qwen3-tts-1_7b-base",        "repo": "Qwen/Qwen3-TTS-12Hz-1.7B-Base",        "size_mb": 3400, "bundled": false, "optional": true,
+     "note": "Only downloaded when the qwen3-clone voice is selected; the CustomVoice model handles all 9 timbres."},
+    {"id": "qwen3-tts-tokenizer-12hz",   "repo": "Qwen/Qwen3-TTS-Tokenizer-12Hz",         "size_mb": 250,  "bundled": false}
+  ],
+  "disk_required_mb": 8192,
+  "ram_required_mb": 8192,
+  "gpu": "optional",
+  "config_schema": {
+    "fields": [
+      {
+        "key": "device",
+        "type": "select",
+        "label": "Inference device",
+        "default": "cpu",
+        "options": [
+          {"value": "cpu",  "label": "CPU (slow, ~10-30 s/line on 8 cores)"},
+          {"value": "cuda", "label": "CUDA (NVIDIA GPU, fast)"},
+          {"value": "mps",  "label": "MPS (Apple Silicon, beta)"}
+        ]
+      },
+      {
+        "key": "dtype",
+        "type": "select",
+        "label": "Weight precision",
+        "default": "auto",
+        "options": [
+          {"value": "auto",     "label": "Auto (bf16 on CUDA, fp32 on CPU)"},
+          {"value": "bfloat16", "label": "bfloat16 (smaller, faster on supported HW)"},
+          {"value": "float16",  "label": "float16 (CUDA only)"},
+          {"value": "float32",  "label": "float32 (most accurate, biggest)"}
+        ]
+      },
+      {
+        "key": "voice_ref_audio",
+        "type": "file",
+        "label": "Default voice reference (3+ seconds, mono WAV recommended)",
+        "help": "Used by the 'qwen3-clone' voice. Per-speaker overrides set in the speaker panel take precedence."
+      },
+      {
+        "key": "voice_ref_text",
+        "type": "string",
+        "label": "Default voice reference transcript",
+        "help": "Optional. If provided alongside the reference clip, clone quality is noticeably better. Leave empty to use x-vector-only mode."
+      }
+    ]
+  }
+}

@@ -1,0 +1,161 @@
+name: Release
+
+# Cuts the platform zips for the Qwen3-TTS add-on, attaches them to a
+# GitHub Release, and pings the catalog repo.
+#
+# Heavier than the Piper workflow because pyinstaller has to freeze
+# torch + transformers + qwen-tts. We use 90 min timeouts (default 360)
+# but keep an eye on cost.
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Existing tag to (re)release (e.g. v1.0.0)"
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            platform_suffix: linux-x86_64
+          - os: macos-latest
+            platform_suffix: macos-universal
+          - os: windows-latest
+            platform_suffix: windows-x86_64
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.tag || github.ref }}
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Resolve version
+        id: ver
+        shell: bash
+        run: |
+          TAG="${{ github.event.inputs.tag || github.ref_name }}"
+          VERSION="${TAG#v}"
+          MANIFEST_VERSION=$(python -c "import json; print(json.load(open('manifest.json'))['version'])")
+          if [ "$VERSION" != "$MANIFEST_VERSION" ]; then
+            echo "::error::tag $TAG implies version $VERSION but manifest.json declares $MANIFEST_VERSION"
+            exit 1
+          fi
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Install build deps
+        shell: bash
+        run: |
+          python -m pip install --upgrade pip
+          # CPU-only torch keeps the bundle below the 2 GB GitHub Release
+          # asset limit. CUDA builds, when we add them, ship as a separate
+          # asset (e.g. `qwen3-tts-1.0.0-linux-x86_64-cuda121.zip`).
+          pip install pyinstaller
+          pip install torch --extra-index-url https://download.pytorch.org/whl/cpu
+          # `qwen-tts` pins transformers==4.57.3 and accelerate==1.12.0
+          # plus librosa/soundfile/sox/onnxruntime/einops. Letting pip
+          # resolve from the package metadata keeps us aligned with the
+          # version Qwen tested against — drift between transformers
+          # versions has bitten this model family before.
+          pip install qwen-tts
+
+      - name: Build add-on bundle
+        run: pyinstaller qwen3-tts-addon.spec --distpath dist/
+
+      - name: Pack zip
+        id: pack
+        shell: bash
+        run: |
+          set -e
+          VERSION="${{ steps.ver.outputs.version }}"
+          PLAT="${{ matrix.platform_suffix }}"
+          ZIP_NAME="qwen3-tts-${VERSION}-${PLAT}.zip"
+          STAGE="$RUNNER_TEMP/stage"
+          mkdir -p "$STAGE/bin"
+          cp -r dist/qwen3-tts-addon/* "$STAGE/bin/"
+          cp manifest.json LICENSE README.md "$STAGE/"
+          (cd "$STAGE" && zip -r "$GITHUB_WORKSPACE/$ZIP_NAME" .)
+          echo "zip_path=$GITHUB_WORKSPACE/$ZIP_NAME" >> "$GITHUB_OUTPUT"
+          echo "zip_name=$ZIP_NAME" >> "$GITHUB_OUTPUT"
+
+      - name: Compute sha256 sidecar
+        shell: bash
+        run: |
+          ZIP="${{ steps.pack.outputs.zip_path }}"
+          if command -v sha256sum >/dev/null; then
+            sha256sum "$(basename "$ZIP")" > "${ZIP}.sha256"
+          else
+            shasum -a 256 "$(basename "$ZIP")" > "${ZIP}.sha256"
+          fi
+          cat "${ZIP}.sha256"
+
+      - name: Upload as workflow artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: zip-${{ matrix.platform_suffix }}
+          path: |
+            ${{ steps.pack.outputs.zip_path }}
+            ${{ steps.pack.outputs.zip_path }}.sha256
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.tag || github.ref }}
+
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts/
+
+      - name: Resolve tag
+        id: tagref
+        shell: bash
+        run: |
+          TAG="${{ github.event.inputs.tag || github.ref_name }}"
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+
+      - name: Create or update release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: bash
+        run: |
+          set -e
+          TAG="${{ steps.tagref.outputs.tag }}"
+          mapfile -t ASSETS < <(find artifacts -type f \( -name '*.zip' -o -name '*.sha256' \))
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" "${ASSETS[@]}" --clobber
+          else
+            gh release create "$TAG" \
+              --title "$TAG" \
+              --notes "Automated release for qwen3-tts $TAG." \
+              "${ASSETS[@]}"
+          fi
+
+      - name: Trigger Subtitld catalog rebuild
+        env:
+          GH_TOKEN: ${{ secrets.SUBTITLD_BOT_TOKEN }}
+        shell: bash
+        run: |
+          if [ -z "${GH_TOKEN}" ]; then
+            echo "::warning::SUBTITLD_BOT_TOKEN not set — catalog rebuild skipped (cron will pick this up within 6 h)"
+            exit 0
+          fi
+          gh api repos/Subtitld/addons-catalog/dispatches \
+            -f event_type=catalog-rebuild \
+            -F client_payload[addon]=qwen3-tts \
+            -F client_payload[tag]="${{ steps.tagref.outputs.tag }}"

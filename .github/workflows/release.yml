@@ -75,6 +75,37 @@ jobs:
       - name: Build add-on bundle
         run: pyinstaller qwen3-tts-addon.spec --distpath dist/
 
+      - name: Smoke test frozen binary (hello frame)
+        shell: bash
+        run: |
+          set -e
+          BIN_DIR="dist/qwen3-tts-addon"
+          BIN_NAME="qwen3-tts-addon"
+          if [ "$RUNNER_OS" = "Windows" ]; then BIN_NAME="${BIN_NAME}.exe"; fi
+          BIN="$BIN_DIR/$BIN_NAME"
+          # Wrapper emits `hello` immediately on startup; one line +
+          # EOF on stdin exits clean. Loading qwen-tts itself is what
+          # we're checking here — drift in the transformers/qwen-tts
+          # version pin has caused import-time failures before. 30 s
+          # is plenty for the import on all three runners.
+          HELLO=$(timeout 30 "$BIN" < /dev/null | head -n 1)
+          echo "frame: $HELLO"
+          python - "$HELLO" <<'PY'
+          import json, sys
+          frame = json.loads(sys.argv[1])
+          assert frame.get('type') == 'hello', frame
+          assert frame.get('addon') == 'qwen3-tts', frame
+          caps = frame.get('capabilities') or []
+          assert any(c.get('task') == 'tts.synthesize' for c in caps), caps
+          tts = next(c for c in caps if c.get('task') == 'tts.synthesize')
+          voices = tts.get('voices') or []
+          ids = {v.get('id') for v in voices}
+          # Manifest declares 9 fixed timbres + qwen3-clone. Sanity-
+          # check the clone voice + a couple of named timbres.
+          assert 'qwen3-clone' in ids, ids
+          assert any(v.startswith('qwen3-') and v != 'qwen3-clone' for v in ids), ids
+          PY
+
       - name: Pack zip
         id: pack
         shell: bash

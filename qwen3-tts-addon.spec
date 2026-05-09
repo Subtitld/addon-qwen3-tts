@@ -25,11 +25,16 @@ hiddenimports = (
     + _safe_collect(collect_submodules, 'librosa')
     + _safe_collect(collect_submodules, 'soundfile')
     + _safe_collect(collect_submodules, 'einops')
+    # transformers can pull torchaudio for some audio processors; collect
+    # explicitly so the freeze never silently drops it. coqui's v1.0.3
+    # bundle hit exactly this shape of bug.
+    + _safe_collect(collect_submodules, 'torchaudio')
 )
 datas = (
     _safe_collect(collect_data_files, 'qwen_tts')
     + _safe_collect(collect_data_files, 'transformers')
     + _safe_collect(collect_data_files, 'librosa')
+    + _safe_collect(collect_data_files, 'torchaudio')
     + [('manifest.json', '.')]
 )
 

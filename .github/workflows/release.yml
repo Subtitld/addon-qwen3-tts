@@ -64,7 +64,11 @@ jobs:
           # asset limit. CUDA builds, when we add them, ship as a separate
           # asset (e.g. `qwen3-tts-1.0.0-linux-x86_64-cuda121.zip`).
           pip install pyinstaller
-          pip install torch --extra-index-url https://download.pytorch.org/whl/cpu
+          # torch + torchaudio together from the CPU index — torchaudio's
+          # ABI is bound to the exact torch version, and transformers' audio
+          # processors pull it transitively. Installing both from the same
+          # index keeps the wheels in lockstep.
+          pip install torch torchaudio --extra-index-url https://download.pytorch.org/whl/cpu
           # `qwen-tts` pins transformers==4.57.3 and accelerate==1.12.0
           # plus librosa/soundfile/sox/onnxruntime/einops. Letting pip
           # resolve from the package metadata keeps us aligned with the

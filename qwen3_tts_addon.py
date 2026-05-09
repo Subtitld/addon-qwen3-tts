@@ -42,7 +42,7 @@ logging.basicConfig(stream=sys.stderr, level=logging.INFO,
 
 PROTOCOL = 1
 ADDON_ID = 'qwen3-tts'
-VERSION = '1.0.3'
+VERSION = '1.0.4'
 
 # HF repo ids (overridable via env for offline / mirrored installs).
 DEFAULT_CUSTOMVOICE_REPO = os.environ.get(
@@ -368,6 +368,13 @@ def main() -> int:
                 args=(rid, frame.get('params') or {}, defaults),
                 daemon=True,
             ).start()
+            continue
+        # Host control frames (`ready` confirms our hello, future-proof
+        # for other host-→-addon notifications) carry no request id and
+        # expect no response. Log and ignore — only error on actual
+        # *requests* we don't recognise.
+        if not rid:
+            log.debug('ignoring host control frame: %s', ftype)
             continue
 
         emit_error(rid, 'bad_params', f'unknown request type: {ftype!r}')

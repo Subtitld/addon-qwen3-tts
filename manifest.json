@@ -1,7 +1,7 @@
 {
   "manifest_version": 1,
   "id": "qwen3-tts",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "display_name": "Qwen3-TTS (offline, 1.7B)",
   "summary": "Multilingual neural TTS with 9 premium timbres + 3-second voice cloning. Heavy: ~3.5 GB model, 8+ GB RAM, CPU or CUDA.",
   "author": "Subtitld add-on team",

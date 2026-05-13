@@ -1,7 +1,7 @@
 {
   "manifest_version": 1,
   "id": "qwen3-tts",
-  "version": "1.0.4",
+  "version": "1.0.5",
   "display_name": "Qwen3-TTS (offline, 1.7B)",
   "summary": "Multilingual neural TTS with 9 premium timbres + 3-second voice cloning. Heavy: ~3.5 GB model, 8+ GB RAM, CPU or CUDA.",
   "author": "Subtitld add-on team",
@@ -70,6 +70,13 @@
         "type": "string",
         "label": "Default voice reference transcript",
         "help": "Optional. If provided alongside the reference clip, clone quality is noticeably better. Leave empty to use x-vector-only mode."
+      },
+      {
+        "key": "skip_ref_text",
+        "type": "bool",
+        "default": false,
+        "label": "Skip auto-extracted reference transcript",
+        "help": "When the dubbing UI extracts a reference clip from the project audio, it normally also forwards the matching subtitle text as the transcript to improve clone accent fidelity. Enable this to suppress the transcript — qwen3 will fall back to its built-in ASR. Useful when the subtitle text paraphrases rather than transcribes verbatim, or when the source language is uncertain."
       }
     ]
   }

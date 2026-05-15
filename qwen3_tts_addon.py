@@ -42,7 +42,7 @@ logging.basicConfig(stream=sys.stderr, level=logging.INFO,
 
 PROTOCOL = 1
 ADDON_ID = 'qwen3-tts'
-VERSION = '1.0.5'
+VERSION = '1.0.6'
 
 # HF repo ids (overridable via env for offline / mirrored installs).
 DEFAULT_CUSTOMVOICE_REPO = os.environ.get(
@@ -259,6 +259,32 @@ def handle_tts_synthesize(rid: str, params: dict, defaults: dict) -> None:
     emit_progress(rid, 0.4, 'Synthesizing...')
     Path(output_path).parent.mkdir(parents=True, exist_ok=True)
     instruct = params.get('instruct') or ''
+
+    # Seed every sampler PyTorch uses before each generation. Qwen3-TTS is
+    # autoregressive and its sampler reads `torch`'s global RNG state — so
+    # without seeding, byte-identical (text, voice, ref_audio, ref_text)
+    # inputs produce a different waveform every call. The host injects a
+    # per-speaker stable seed so each speaker has a fixed "voice fingerprint"
+    # across runs while different subtitle text still produces different
+    # delivery. Missing / unparseable seeds fall through to the legacy
+    # stochastic behaviour rather than erroring — additive contract.
+    seed_param = params.get('seed')
+    if seed_param is not None:
+        try:
+            seed_int = int(seed_param) & 0xFFFFFFFF  # torch wants uint32-ish
+        except (TypeError, ValueError):
+            log.debug('seed=%r not int-castable, ignored', seed_param)
+        else:
+            try:
+                import torch
+                torch.manual_seed(seed_int)
+                if torch.cuda.is_available():
+                    torch.cuda.manual_seed_all(seed_int)
+            except Exception as exc:
+                # Seed failure must not break synthesis — surface in logs
+                # and proceed unseeded.
+                log.warning('seed=%d apply failed (%s); generation continues unseeded',
+                            seed_int, exc)
 
     try:
         if variant == 'customvoice':
